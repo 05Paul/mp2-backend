@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n    id,\n    name,\n    email,\n    password_plain,\n    password_hashed,\n    password_salted,\n    password_peppered,\n    password_salted_and_peppered\nFROM\n    accounts\nWHERE\n    email = $1;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "password_plain",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "password_hashed",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "password_salted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "password_peppered",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "password_salted_and_peppered",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a7bb9850a482dc839db3425c4bd0f687dc4edbdebe2878489bd6b6d0fcc2ff41"
+}

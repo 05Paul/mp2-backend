@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO accounts(\n    name,\n    email,\n    password_plain,\n    password_hashed,\n    password_salted,\n    password_peppered,\n    password_salted_and_peppered\n)VALUES(\n$1,\n$2,\n$3,\n$4,\n$5,\n$6,\n$7\n) RETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bca1e80b65583d979d551ed7891a2aa3cb5d07e322230bed3f3a956e30cd2622"
+}

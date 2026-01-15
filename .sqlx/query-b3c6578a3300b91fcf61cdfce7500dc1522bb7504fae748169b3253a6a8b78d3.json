@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO passkey_user_credentials(\n\tcredential_id,\n\tuser_id,\n\tcredential\n)\nVALUES (\n\t$1,\n\t$2,\n\t$3\n);\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3c6578a3300b91fcf61cdfce7500dc1522bb7504fae748169b3253a6a8b78d3"
+}

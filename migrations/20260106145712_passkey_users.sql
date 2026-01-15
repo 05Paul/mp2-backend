@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS passkey_users(
+    id UUID PRIMARY KEY,
+    mail TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL
+);
