@@ -145,7 +145,7 @@ impl PasskeyRepository {
             user.mail,
             user.name
         )
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
 
         Ok(())
@@ -185,19 +185,39 @@ impl PasskeyRepository {
             .collect())
     }
 
+    pub async fn get_user_credential(
+        pool: &PgPool,
+        user_id: &Uuid,
+        passkey_id: &[u8],
+    ) -> Result<Option<Passkey>, Error> {
+        let record = query_file!(
+            "queries/passkey/get-user-credential.sql",
+            user_id,
+            passkey_id
+        )
+        .fetch_one(pool)
+        .await;
+
+        match record {
+            Ok(record) => Ok(Some(serde_json::from_value::<Passkey>(record.credential)?)),
+            Err(sqlx::Error::RowNotFound) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     pub async fn create_user_credentials(
         pool: &PgPool,
         user_id: &Uuid,
         passkey: &Passkey,
     ) -> Result<(), Error> {
         let passkey_json = to_value(passkey).expect("Must be parseable");
-        let _record = query_file!(
+        let _res = query_file!(
             "queries/passkey/create-user-credentials.sql",
             passkey.cred_id().as_slice(),
             user_id,
             passkey_json,
         )
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
 
         Ok(())
@@ -206,9 +226,9 @@ impl PasskeyRepository {
 
 #[derive(Serialize)]
 pub struct PasskeyUser {
-    id: Uuid,
-    mail: String,
-    name: String,
+    pub(crate) id: Uuid,
+    pub(crate) mail: String,
+    pub(crate) name: String,
 }
 
 impl PasskeyUser {

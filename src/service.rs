@@ -9,15 +9,18 @@ use sqlx::PgPool;
 use webauthn_rs::{
     Webauthn,
     prelude::{
-        CreationChallengeResponse, PasskeyAuthentication, PasskeyRegistration, PublicKeyCredential,
+        CreationChallengeResponse, DiscoverableAuthentication, DiscoverableKey,
+        PasskeyAuthentication, PasskeyRegistration, PublicKeyCredential,
         RegisterPublicKeyCredential, RequestChallengeResponse, Uuid,
     },
 };
 
 use crate::{
     crypto::{Method, PasswordHandler},
-    repository::{PasskeyRepository, Repository, UserDTO},
+    repository::{PasskeyRepository, PasskeyUser, Repository, UserDTO},
 };
+
+use log::{Level, log};
 
 #[derive(Debug, Serialize)]
 struct ServiceError {
@@ -170,12 +173,36 @@ async fn start_passkey_registration(
             Err(_) => return ServiceError::internal_server_error(),
         };
 
+    if credentials.is_none() {
+        match PasskeyRepository::create_user(
+            &pool,
+            &PasskeyUser {
+                id: user_id,
+                mail: registration.mail.clone(),
+                name: registration.name.clone(),
+            },
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(err) => {
+                log!(Level::Error, "Creation: {err}");
+                return ServiceError::internal_server_error();
+            }
+        }
+    }
+
     let (creation_challenge_response, passkey_registration) = match webauthn
         .start_passkey_registration(user_id, &registration.mail, &registration.name, credentials)
     {
         Ok(registration_data) => registration_data,
         Err(_) => return ServiceError::internal_server_error(),
     };
+    log!(
+        Level::Info,
+        "Issued Challenge: {:?}",
+        creation_challenge_response,
+    );
 
     match registration_store.lock() {
         Ok(mut store) => {
@@ -213,7 +240,10 @@ async fn finish_passkey_registration(
                 message: format!("Passkey registration does not exist"),
             });
         }
-        Err(_) => return ServiceError::internal_server_error(),
+        Err(err) => {
+            log!(Level::Error, "Mutex eroro?????: {err}");
+            return ServiceError::internal_server_error();
+        }
     };
 
     let passkey = match webauthn.finish_passkey_registration(
@@ -221,7 +251,8 @@ async fn finish_passkey_registration(
         &passkey_registration,
     ) {
         Ok(passkey) => passkey,
-        Err(_) => {
+        Err(err) => {
+            log!(Level::Error, "{err}");
             return HttpResponse::BadRequest().json(ServiceError {
                 kind: ErrorKind::AuthenticationFailure,
                 message: format!("Failed to authenticate passkey"),
@@ -238,6 +269,7 @@ async fn finish_passkey_registration(
                     message: format!("Credential id already exists"),
                 })
             } else {
+                log!(Level::Error, "Credential creation: {err}");
                 ServiceError::internal_server_error()
             }
         }
@@ -327,6 +359,89 @@ async fn finish_passkey_authentication(
     let _result = match webauthn.finish_passkey_authentication(
         &authentication.public_key_credential,
         &passkey_authentication,
+    ) {
+        Ok(result) => result,
+        Err(_) => {
+            return HttpResponse::Unauthorized().json(ServiceError {
+                kind: ErrorKind::AuthenticationFailure,
+                message: format!("Could not authenticate passkey"),
+            });
+        }
+    };
+
+    HttpResponse::Ok().finish()
+}
+
+#[post("/passkey/start-discoverable-authentication")]
+async fn start_discoverable_authentication(
+    webauthn: web::Data<Webauthn>,
+    discoverable_store: web::Data<Mutex<HashMap<Uuid, DiscoverableAuthentication>>>,
+) -> impl Responder {
+    let (request_challenge_response, discoverable_authentication) =
+        match webauthn.start_discoverable_authentication() {
+            Ok(result) => result,
+            Err(_) => {
+                return ServiceError::internal_server_error();
+            }
+        };
+
+    match discoverable_store.lock() {
+        Ok(mut store) => {
+            let uuid = Uuid::new_v4();
+            store.insert(uuid, discoverable_authentication);
+            HttpResponse::Ok().json(PasskeyRequestChallenge {
+                user_id: uuid,
+                request_challenge_response,
+            })
+        }
+        Err(_) => ServiceError::internal_server_error(),
+    }
+}
+
+#[post("/passkey/finish-discoverable-authentication")]
+async fn finish_discoverable_authentication(
+    authentication: web::Json<FinishPasskeyAuthentication>,
+    pool: web::ThinData<PgPool>,
+    webauthn: web::Data<Webauthn>,
+    discoverable_store: web::Data<Mutex<HashMap<Uuid, DiscoverableAuthentication>>>,
+) -> impl Responder {
+    let (user_id, passkey_id) = match webauthn
+        .identify_discoverable_authentication(&authentication.public_key_credential)
+    {
+        Ok(result) => result,
+        Err(_) => {
+            return ServiceError::internal_server_error();
+        }
+    };
+
+    let passkey = match PasskeyRepository::get_user_credential(&pool, &user_id, passkey_id).await {
+        Ok(Some(passkey)) => passkey,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(ServiceError {
+                kind: ErrorKind::DoesNotExist,
+                message: format!("Passkey does not exist"),
+            });
+        }
+        Err(_) => return ServiceError::internal_server_error(),
+    };
+    let discoverable_authentication = match discoverable_store
+        .lock()
+        .map(|mut store| store.remove(&authentication.user_id))
+    {
+        Ok(Some(discoverable_authentication)) => discoverable_authentication,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(ServiceError {
+                kind: ErrorKind::DoesNotExist,
+                message: format!("Passkey authentication does not exist"),
+            });
+        }
+        Err(_) => return ServiceError::internal_server_error(),
+    };
+
+    let _result = match webauthn.finish_discoverable_authentication(
+        &authentication.public_key_credential,
+        discoverable_authentication,
+        &[DiscoverableKey::from(passkey)],
     ) {
         Ok(result) => result,
         Err(_) => {

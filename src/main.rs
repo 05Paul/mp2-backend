@@ -3,13 +3,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use actix_web::{App, HttpServer, middleware::Logger, web};
+use actix_web::{
+    App, HttpServer,
+    middleware::Logger,
+    web::{self, service},
+};
 use dotenv::dotenv;
 use env_logger::{Env, init_from_env};
 use sqlx::{PgPool, migrate};
 use webauthn_rs::{
     Webauthn, WebauthnBuilder,
-    prelude::{PasskeyAuthentication, PasskeyRegistration, Url, Uuid},
+    prelude::{DiscoverableAuthentication, PasskeyAuthentication, PasskeyRegistration, Url, Uuid},
 };
 
 use crate::{config::Configuration, crypto::PasswordHandler, error::Error};
@@ -28,10 +32,17 @@ async fn main() -> Result<(), Error> {
 
     let config = Configuration::try_from_env()?;
 
-    let (password_handler, webauthn, pool, registration_store, authentication_store) =
-        setup(&config).await?;
+    let (
+        password_handler,
+        webauthn,
+        pool,
+        registration_store,
+        authentication_store,
+        discoverable_store,
+    ) = setup(&config).await?;
     let registration_store = web::Data::from(registration_store);
     let authentication_store = web::Data::from(authentication_store);
+    let discoverable_store = web::Data::from(discoverable_store);
 
     migrate!().run(&pool).await?;
 
@@ -42,12 +53,17 @@ async fn main() -> Result<(), Error> {
             .app_data(webauthn.clone())
             .app_data(registration_store.clone())
             .app_data(authentication_store.clone())
+            .app_data(discoverable_store.clone())
             .wrap(Logger::default())
             .service(service::sign_up)
             .service(service::sign_in)
             .service(service::user_credentials)
             .service(service::start_passkey_registration)
             .service(service::finish_passkey_registration)
+            .service(service::start_passkey_authentication)
+            .service(service::finish_passkey_authentication)
+            .service(service::start_discoverable_authentication)
+            .service(service::finish_discoverable_authentication)
     })
     .bind(config.server_socket())?
     .run();
@@ -64,6 +80,7 @@ async fn setup(
         PgPool,
         Arc<Mutex<HashMap<Uuid, PasskeyRegistration>>>,
         Arc<Mutex<HashMap<Uuid, PasskeyAuthentication>>>,
+        Arc<Mutex<HashMap<Uuid, DiscoverableAuthentication>>>,
     ),
     Error,
 > {
@@ -95,11 +112,16 @@ async fn setup(
 
     let authentication_store = Arc::new(Mutex::new(HashMap::<Uuid, PasskeyAuthentication>::new()));
 
+    let discoverable_store = Arc::new(Mutex::new(
+        HashMap::<Uuid, DiscoverableAuthentication>::new(),
+    ));
+
     Ok((
         password_handler,
         webauthn,
         pool,
         registration_store,
         authentication_store,
+        discoverable_store,
     ))
 }

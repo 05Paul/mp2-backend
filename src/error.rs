@@ -11,6 +11,7 @@ pub enum Error {
     SqlxError(sqlx::Error),
     MigrationError(MigrateError),
     WebauthnError(WebauthnError),
+    SerdeJson(serde_json::Error),
     Other(String),
 }
 
@@ -33,6 +34,7 @@ impl Display for Error {
             Error::MigrationError(migrate_error) => write!(f, "{migrate_error}"),
             Error::WebauthnError(webauthn_error) => write!(f, "{webauthn_error}"),
             Error::Other(error) => write!(f, "{error}"),
+            Error::SerdeJson(error) => write!(f, "{error}"),
         }
     }
 }
@@ -72,5 +74,11 @@ impl From<MigrateError> for Error {
 impl From<WebauthnError> for Error {
     fn from(value: WebauthnError) -> Self {
         Error::WebauthnError(value)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Self {
+        Error::SerdeJson(value)
     }
 }
