@@ -18,7 +18,7 @@ WORKDIR /app
 
 COPY . .
 # Install host build dependencies.
-RUN apk add --no-cache clang lld musl-dev git
+RUN apk add --no-cache clang lld musl-dev git openssl-dev pkgconfig openssl-libs-static
 
 # Build the application.
 # Leverage a cache mount to /usr/local/cargo/registry/
